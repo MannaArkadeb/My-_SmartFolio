@@ -105,6 +105,16 @@ def cal_rolling_mean_std(df: pd.DataFrame, cal_cols: List[str], lookback: int = 
     return df
 
 
+def _zscore_safe(series: pd.Series) -> pd.Series:
+    """Return z-score, guarding against zero or NaN std."""
+    mean = series.mean()
+    std = series.std()
+    if pd.isna(std) or std < 1e-8:
+        # If variance is zero, all values are identical; return zeros.
+        return series.map(lambda _: 0.0)
+    return (series - mean) / std
+
+
 def group_and_norm(df: pd.DataFrame, base_cols: List[str], n_clusters: int) -> pd.DataFrame:
     result = []
     kmeans = KMeans(n_clusters=n_clusters, random_state=42)
@@ -130,7 +140,7 @@ def group_and_norm(df: pd.DataFrame, base_cols: List[str], n_clusters: int) -> p
             group.loc[mask, "cluster"] = closest_clusters
         # Z-score within cluster
         for f in FEATURE_COLS:
-            group[f"{f}_normalized"] = group.groupby("cluster")[f].transform(lambda x: (x - x.mean()) / x.std())
+            group[f"{f}_normalized"] = group.groupby("cluster")[f].transform(_zscore_safe)
         result.append(group)
     return pd.concat(result)
 
@@ -401,7 +411,9 @@ def main():
     parser.add_argument("--relation_type", default="hy")
     parser.add_argument("--lookback", type=int, default=20)
     parser.add_argument("--threshold", type=float, default=0.2)
-    parser.add_argument("--norm", action="store_true", help="Use normalized features")
+    parser.add_argument("--norm", dest="norm", action="store_true", help="Use normalized features (default)")
+    parser.add_argument("--no-norm", dest="norm", action="store_false", help="Disable feature normalization")
+    parser.set_defaults(norm=True)
     parser.add_argument("--industry_mode", default="identity", choices=["identity", "full", "sector"], help="How to build industry matrix for non-CN markets")
     args = parser.parse_args()
 

@@ -183,7 +183,8 @@ if __name__ == '__main__':
             sample_path = os.path.join(data_dir, sample_files[0])
             with open(sample_path, 'rb') as f:
                 sample_data = pickle.load(f)
-            args.num_stocks = sample_data['features'].shape[1]
+            # features shape is [num_stocks, feature_dim], so use shape[0]
+            args.num_stocks = sample_data['features'].shape[0]
             print(f"Auto-detected num_stocks for custom market: {args.num_stocks}")
         else:
             raise ValueError(f"No pickle files found in {data_dir} to determine num_stocks")
@@ -197,7 +198,8 @@ if __name__ == '__main__':
                 sample_path = os.path.join(data_dir, sample_files[0])
                 with open(sample_path, 'rb') as f:
                     sample_data = pickle.load(f)
-                args.num_stocks = sample_data['features'].shape[1]
+                # features shape is [num_stocks, feature_dim], so use shape[0]
+                args.num_stocks = sample_data['features'].shape[0]
                 print(f"Auto-detected num_stocks for {args.market} market: {args.num_stocks}")
             else:
                 raise ValueError(f"No pickle files found in {data_dir} to determine num_stocks")

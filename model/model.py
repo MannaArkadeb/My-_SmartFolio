@@ -106,13 +106,14 @@ class HeteFusionAttn(Module):
             return (beta * inputs).sum(1), None
 
 class HGAT(nn.Module):
-    def __init__(self, num_stocks, n_features=8, num_heads=8, hidden_dim=512, no_ind=False, no_neg=False):
+    def __init__(self, num_stocks, n_features=8, num_heads=8, hidden_dim=512, no_ind=False, no_neg=False, input_dim=6):
         super(HGAT, self).__init__()
         self.num_heads = num_heads
         self.n_adj_mat = num_stocks
         self.in_features = n_features
         self.out_features = n_features
         self.hidden_dim = hidden_dim
+        self.input_dim = input_dim  # Store the per-stock feature dimension
         self.ind_gat = MHGraphAttn(
             in_features=hidden_dim, out_features=n_features, num_heads=num_heads)
         self.pos_gat = MHGraphAttn(
@@ -120,7 +121,8 @@ class HGAT(nn.Module):
         self.neg_gat = MHGraphAttn(
             in_features=hidden_dim, out_features=n_features, num_heads=num_heads)
 
-        self.mlp_self1 = nn.Linear(n_features, hidden_dim)
+        # mlp_self1 transforms raw input features to hidden_dim
+        self.mlp_self1 = nn.Linear(input_dim, hidden_dim)
         self.ind_mlp = nn.Linear(n_features*num_heads, hidden_dim)
         self.pos_mlp = nn.Linear(n_features * num_heads, hidden_dim)
         self.neg_mlp = nn.Linear(n_features*num_heads, hidden_dim)
@@ -142,13 +144,35 @@ class HGAT(nn.Module):
 
     def forward(self, inputs, require_weights=False):
         batch = inputs.shape[0]
-        inputs = inputs.reshape(batch, -1, self.n_adj_mat)
-        ind_adj = inputs[:, :self.n_adj_mat, :]
-        pos_adj = inputs[:, self.n_adj_mat:self.n_adj_mat * 2, :]
-        neg_adj = inputs[:, self.n_adj_mat * 2:self.n_adj_mat * 3, :]
-        inputs = inputs[:, self.n_adj_mat * 3:, :].permute(dims=(0, 2, 1))
+        # Observation layout: [ind_matrix, pos_matrix, neg_matrix, features]
+        # Each matrix: num_stocks*num_stocks, features: num_stocks*input_dim
+        # Total: 3*num_stocks^2 + num_stocks*input_dim
+        
+        obs_len = inputs.shape[1]
+        expected_len = 3 * self.n_adj_mat * self.n_adj_mat + self.n_adj_mat * self.input_dim
+        if obs_len != expected_len:
+            raise ValueError(f"HGAT expects observation length {expected_len} but got {obs_len}. "
+                           f"Check num_stocks={self.n_adj_mat} and input_dim={self.input_dim}.")
+        
+        # Parse flattened observation
+        ptr = 0
+        ind_adj_flat = inputs[:, ptr:ptr + self.n_adj_mat * self.n_adj_mat]
+        ptr += self.n_adj_mat * self.n_adj_mat
+        pos_adj_flat = inputs[:, ptr:ptr + self.n_adj_mat * self.n_adj_mat]
+        ptr += self.n_adj_mat * self.n_adj_mat
+        neg_adj_flat = inputs[:, ptr:ptr + self.n_adj_mat * self.n_adj_mat]
+        ptr += self.n_adj_mat * self.n_adj_mat
+        features_flat = inputs[:, ptr:]
+        
+        # Reshape to [batch, num_stocks, num_stocks] for adjacency
+        ind_adj = ind_adj_flat.reshape(batch, self.n_adj_mat, self.n_adj_mat)
+        pos_adj = pos_adj_flat.reshape(batch, self.n_adj_mat, self.n_adj_mat)
+        neg_adj = neg_adj_flat.reshape(batch, self.n_adj_mat, self.n_adj_mat)
+        
+        # Reshape to [batch, num_stocks, input_dim] for features
+        features = features_flat.reshape(batch, self.n_adj_mat, self.input_dim)
 
-        support = self.mlp_self1(inputs)
+        support = self.mlp_self1(features)
         ind_support, ind_attn_weights = self.ind_gat(support, ind_adj, require_weights)
         pos_support, pos_attn_weights = self.pos_gat(support, pos_adj, require_weights)
         neg_support, neg_attn_weights = self.neg_gat(support, neg_adj, require_weights)

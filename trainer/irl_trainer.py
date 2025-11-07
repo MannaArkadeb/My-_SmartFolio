@@ -314,7 +314,7 @@ def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
         expert_trajectories = generate_expert_trajectories(
             args, 
             train_loader.dataset, 
-            num_trajectories=1000
+            num_trajectories=100
         )
     elif expert_type == 'ga':
         print("\n" + "="*70)

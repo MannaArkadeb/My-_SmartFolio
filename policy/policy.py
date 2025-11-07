@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Callable, Dict, List, Optional, Tuple, Type, Union
-import gym
+import gymnasium as gym
+from gymnasium import spaces
 import torch
 import torch as th
 import torch.nn as nn
@@ -34,15 +35,18 @@ class HGATNetwork(nn.Module):
         self.latent_dim_vf = last_layer_dim_vf
 
         self.num_stocks = last_layer_dim_pi
-        # With flattened observation: feature_dim = 3*num_stocks^2 + num_stocks*6
-        # Solve for num_stocks: 3*n^2 + 6*n = feature_dim
-        # We can also just use last_layer_dim_pi which should equal num_stocks
-        self.n_features = 6  # Base features: close, open, high, low, prev_close, volume
+        # With flattened observation: feature_dim = 3*num_stocks^2 + num_stocks*input_dim
+        # Calculate input_dim: feature_dim = 3*num_stocks^2 + num_stocks*input_dim
+        # => input_dim = (feature_dim - 3*num_stocks^2) / num_stocks
+        self.n_features = (feature_dim - 3 * self.num_stocks * self.num_stocks) // self.num_stocks
+        
+        if self.n_features <= 0:
+            raise ValueError(f"Invalid n_features={self.n_features} calculated from feature_dim={feature_dim} and num_stocks={self.num_stocks}")
 
-        self.policy_net = HGAT(num_stocks=self.num_stocks, n_features=self.n_features,
+        self.policy_net = HGAT(num_stocks=self.num_stocks, input_dim=self.n_features,
                                num_heads=n_head, hidden_dim=hidden_dim,
                                no_ind=no_ind, no_neg=no_neg)
-        self.value_net = HGAT(num_stocks=self.num_stocks, n_features=self.n_features,
+        self.value_net = HGAT(num_stocks=self.num_stocks, input_dim=self.n_features,
                               num_heads=n_head, hidden_dim=hidden_dim,
                               no_ind=no_ind, no_neg=no_neg)
 
@@ -58,13 +62,12 @@ class HGATNetwork(nn.Module):
 
     def forward_critic(self, features: torch.Tensor) -> torch.Tensor:
         return self.value_net(features)
-
 class HGATActorCriticPolicy(ActorCriticPolicy):
     def __init__(self,
-                 observation_space: gym.spaces.Space,
-                 action_space: gym.spaces.Space,
+                 observation_space: spaces.Space,
+                 action_space: spaces.Space,
                  lr_schedule: Callable[[float], float],
-                 net_arch: Optional[List[Union[int, Dict[str, List[int]]]]] = None,
+                 net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
                  activation_fn: Type[nn.Module] = nn.Tanh,
                  *args,
                  **kwargs,
