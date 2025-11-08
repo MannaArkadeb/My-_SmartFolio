@@ -21,7 +21,7 @@ import argparse
 import json
 import os
 import pickle
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 import numpy as np
 import pandas as pd
@@ -215,14 +215,22 @@ def _build_daily_sample(
 
     cols = FEATURE_COLS_NORM if norm else FEATURE_COLS
     for code in codes:
-        df_code = df_ts[df_ts["kdcode"] == code]
+        df_code = df_ts[df_ts["kdcode"] == code].copy()
         df_code = df_code.sort_values("dt")
-        ts_array = df_code[cols].values
+        # Force numeric dtype to avoid object arrays when stacking
+        df_code[cols] = df_code[cols].apply(pd.to_numeric, errors="coerce")
+        if df_code[cols].isnull().any().any():
+            return None
+
+        ts_array = df_code[cols].to_numpy(dtype=np.float32, copy=False)
         current = df_code[df_code["dt"] == dt]
         if ts_array.shape[0] != lookback or current.empty:
             return None
+
+        feature_vec = current.iloc[0][cols].astype(np.float32).to_numpy(copy=False)
+
         ts_features.append(ts_array)
-        features.append(current.iloc[0][cols].values)
+        features.append(feature_vec)
         labels.append(float(current.iloc[0]["label"]))
 
     ts_tensor = torch.from_numpy(np.stack(ts_features, axis=0)).float()
@@ -269,6 +277,7 @@ def _concat_with_existing(df_old: pd.DataFrame, df_new: pd.DataFrame) -> pd.Data
 def run(args: argparse.Namespace) -> None:
     dataset_root = args.dataset_root or DATASET_DEFAULT_ROOT
     corr_root = args.corr_root or DATASET_CORR_ROOT
+    print(dataset_root, corr_root)
 
     data_dir = os.path.join(
         dataset_root,
@@ -278,9 +287,12 @@ def run(args: argparse.Namespace) -> None:
     os.makedirs(data_dir, exist_ok=True)
 
     manifest_path = os.path.join(data_dir, MANIFEST_NAME)
-    manifest = _load_manifest(manifest_path)
+    manifest_raw = _load_manifest(manifest_path)
+    manifest = cast(Dict[str, object], manifest_raw)
 
-    raw_path = args.raw_path or manifest.get("raw_snapshot") or _find_latest_raw_snapshot(dataset_root, args.market)
+    raw_snapshot = cast(Optional[str], manifest.get("raw_snapshot"))
+    raw_path = args.raw_path or raw_snapshot or _find_latest_raw_snapshot(dataset_root, args.market)
+    print(f"Using raw snapshot at: {raw_path}")
     df_raw = _load_snapshot(raw_path)
 
     tickers: List[str]
@@ -290,9 +302,11 @@ def run(args: argparse.Namespace) -> None:
         tickers = sorted(df_raw["kdcode"].unique().tolist())
 
     next_month_start, next_month_end = _determine_next_month(manifest, df_raw)
+    print(f"Next month to process: {next_month_start.strftime('%Y-%m')}")
     month_tag = next_month_start.strftime("%Y-%m")
 
-    if month_tag in manifest.get("monthly_shards", {}):
+    monthly_shards = cast(Dict[str, str], manifest.setdefault("monthly_shards", {}))
+    if month_tag in monthly_shards:
         print(f"Month {month_tag} already processed. Nothing to do.")
         return
 
@@ -351,13 +365,17 @@ def run(args: argparse.Namespace) -> None:
     monthly_dir = os.path.join(data_dir, "monthly")
     shard_path = _write_monthly_shard(monthly_dir, month_tag, valid_dates, payloads)
 
-    manifest.setdefault("monthly_shards", {})[month_tag] = os.path.relpath(shard_path, data_dir)
-    manifest.setdefault("daily_index", {}).update({dt: os.path.relpath(shard_path, data_dir) for dt in valid_dates})
+    monthly_shards[month_tag] = os.path.relpath(shard_path, data_dir)
+
+    daily_index = cast(Dict[str, str], manifest.setdefault("daily_index", {}))
+    daily_index.update({dt: os.path.relpath(shard_path, data_dir) for dt in valid_dates})
     manifest["last_trading_day"] = valid_dates[-1]
-    manifest.setdefault("corr_matrices", [])
-    if relation_dt not in manifest["corr_matrices"]:
-        manifest["corr_matrices"].append(relation_dt)
-    manifest["tickers"] = sorted(set(manifest.get("tickers", [])) | set(codes))
+    corr_matrices = cast(List[str], manifest.setdefault("corr_matrices", []))
+    if relation_dt not in corr_matrices:
+        corr_matrices.append(relation_dt)
+
+    existing_tickers = cast(List[str], manifest.get("tickers", []))
+    manifest["tickers"] = sorted(set(existing_tickers) | set(codes))
     manifest["raw_snapshot"] = raw_path
 
     _dump_manifest(manifest_path, manifest)

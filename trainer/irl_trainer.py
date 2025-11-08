@@ -314,7 +314,7 @@ def model_predict(args, model, test_loader, split: str = "test"):
                 break
 
         env_instance = env_vec.envs[0]
-        arr, avol, sharpe, mdd, cr, ir = env_instance.evaluate()
+        arr, avol, sharpe, mdd, cr, ir = env_test.evaluate()
         metrics = {
             "arr": arr,
             "avol": avol,
@@ -325,7 +325,7 @@ def model_predict(args, model, test_loader, split: str = "test"):
         }
         record = create_metric_record(args, split, metrics, batch_idx)
         records.append(record)
-        env_snapshots.append((env_instance, record["run_id"]))
+        env_snapshots.append((env_test, record["run_id"]))
         env_vec.close()
 
     log_info = persist_metrics(records, env_snapshots, args, split)

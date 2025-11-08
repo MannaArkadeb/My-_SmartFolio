@@ -117,7 +117,7 @@ if __name__ == '__main__':
     args.test_start_date = '2024-01-02'
     args.test_end_date = '2024-12-26'
     args.batch_size = 32
-    args.max_epochs = 10
+    args.max_epochs = 1
     args.seed = 123
     # Auto-detect input_dim (number of per-stock features) from a sample file
     try:
