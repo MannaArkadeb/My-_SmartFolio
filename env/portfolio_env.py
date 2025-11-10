@@ -51,8 +51,8 @@ class StockPortfolioEnv(gym.Env):
         # Optional: store for compatibility if needed
         self.top_k = max(1, int(0.1 * self.num_stocks))  # Can be used for constraints later
 
-        # 部分可观测
-        # 观测空间：股票特征及各个关系图
+        # Partially observable setting
+        # Observation space: stock features plus relation graphs
         # HGAT expects flattened input: [ind_matrix, pos_matrix, neg_matrix, features]
         obs_len = 0
         if self.ind_yn:
@@ -74,13 +74,13 @@ class StockPortfolioEnv(gym.Env):
                                             shape=(obs_len,),  # 1D flattened observation
                                             dtype=np.float32)
         self.mode = mode
-        self.reward_net = reward_net  # 注入IRL奖励网络
+        self.reward_net = reward_net  # Inject IRL reward network
         self.device = device
 
     def load_observation(self, ts_yn=False, ind_yn=False, pos_yn=False, neg_yn=False):
-        # Stable-Baselines3 的 DummyVecEnv 需要将环境的观测值 (obs) 存储为 NumPy 数组
+        # Stable-Baselines3's DummyVecEnv expects NumPy observations
         if torch.isnan(self.features_tensor).any():
-            print("nan！！！")
+            print("Detected NaNs in feature tensor!")
         features = self.features_tensor[self.current_step].cpu().numpy()  # [num_stocks, 6]
         corr_matrix = self.corr_tensor[self.current_step].cpu().numpy()
         ind_matrix = self.ind_tensor[self.current_step].cpu().numpy()  # [num_stocks, num_stocks]
@@ -173,12 +173,12 @@ class StockPortfolioEnv(gym.Env):
                 print(f"Weight sum: {weights.sum():.6f}")
                 print(f"Non-zero allocations: {(weights > 0.01).sum()}/{len(weights)}")
 
-            # 使用IRL奖励函数替代原始奖励计算
+            # Use the IRL reward network when available
             if self.reward_net is not None:
                 # self.observation is already flattened [obs_len]
-                state_tensor = torch.FloatTensor(self.observation).to(self.device)  # 当前状态
+                state_tensor = torch.FloatTensor(self.observation).to(self.device)  # Current state
                 # Pass actual weights (continuous) instead of multi-hot
-                action_tensor = torch.FloatTensor(weights).to(self.device)  # 动作（权重向量）
+                action_tensor = torch.FloatTensor(weights).to(self.device)  # Action (weight vector)
                 
                 # Pass wealth information for drawdown calculation
                 wealth_info = torch.FloatTensor([self.net_value, self.peak_value]).to(self.device)
@@ -250,10 +250,9 @@ class StockPortfolioEnv(gym.Env):
         arr, avol, sp, mdd, cr, ir = (0, 0, 0, 0, 0, 0)
         df_daily_return = self.get_df_daily_return()
         if df_daily_return["daily_return"].std() != 0:
-            # 年化收益 arr
-            # 假设一年 252 个交易日
+            # Annualized return (ARR) assuming 252 trading days
             arr = (1 + df_daily_return['daily_return'].mean()) ** 252 - 1
-            # 年化波动率 AVOL
+            # Annualized volatility (AVOL)
             avol = df_daily_return["daily_return"].std() * (252 ** 0.5)
             sp = (
                     (252 ** 0.5)
@@ -271,7 +270,7 @@ class StockPortfolioEnv(gym.Env):
             # Calmar Ratio (CR)
             if mdd != 0:
                 cr = arr / abs(mdd)
-            # 信息比率 IR（需要基准收益序列）
+            # Information Ratio (IR) requires benchmark returns
             if self.benchmark_return is not None:
                 if len(self.benchmark_return) == len(df_daily_return):
                     ex_return = df_daily_return["daily_return"] -\

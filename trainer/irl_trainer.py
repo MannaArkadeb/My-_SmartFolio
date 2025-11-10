@@ -38,7 +38,7 @@ class RewardNetwork(nn.Module):
         return self.fc(x)
 
 
-# 最大熵IRL训练器
+# Maximum entropy IRL trainer
 class MaxEntIRL:
     def __init__(self, reward_net, expert_data, lr=1e-3):
         self.reward_net = reward_net
@@ -47,14 +47,14 @@ class MaxEntIRL:
 
     def train(self, agent_env, model, num_epochs=50, batch_size=32, device='cuda:0'):
         for epoch in range(num_epochs):
-            # 生成代理轨迹
+            # Generate agent trajectories
             agent_trajectories = self._sample_trajectories(agent_env, model, batch_size=batch_size, device=device)
 
-            # 计算专家和代理的奖励差异
+            # Compute the reward gap between expert and agent rollouts
             expert_rewards = self._calculate_rewards(self.expert_data, device)
             agent_rewards = self._calculate_rewards(agent_trajectories, device)
 
-            # 最大熵IRL损失
+            # Maximum entropy IRL loss
             # Original: loss = -(expert_rewards.mean() - torch.logsumexp(agent_rewards, dim=0))
             # Reformulated to always show meaningful values:
             expert_mean = expert_rewards.mean()
@@ -66,7 +66,7 @@ class MaxEntIRL:
             # For logging: show the gap (always interpretable)
             reward_gap = expert_mean - agent_logsumexp
 
-            # 反向传播
+            # Backpropagation
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -148,7 +148,7 @@ class MultiRewardNetwork(nn.Module):
             'base': num_stocks * input_dim  # Flattened features
         }
 
-        # 动态构建编码器
+        # Build encoders dynamically based on enabled relations
         self.encoders = nn.ModuleDict()
         for feat, dim in self.feature_dims.items():
             if dim > 0:
@@ -166,7 +166,7 @@ class MultiRewardNetwork(nn.Module):
                 nn.Linear(hidden_dim, 1)
             )
 
-        # 奖励权重参数
+        # Reward weight parameters (one per enabled feature block, plus drawdown)
         active_feats = [k for k, v in self.feature_dims.items() if v > 0]
         self.num_rewards = len(active_feats)
         if self.use_drawdown:
@@ -199,7 +199,7 @@ class MultiRewardNetwork(nn.Module):
         elif risk_score.dim() == 1:
             risk_score = risk_score.unsqueeze(1)
         
-        # 分割特征
+        # Split flattened features back into logical blocks
         ptr = 0
         features = {}
         for feat, dim in self.feature_dims.items():
@@ -207,7 +207,7 @@ class MultiRewardNetwork(nn.Module):
                 features[feat] = state[..., ptr:ptr + dim]  # [B, dim]
                 ptr += dim
 
-        # 特征-动作融合 (IRL component)
+        # Feature-action fusion (IRL component)
         irl_rewards = []
         for i, (feat, data) in enumerate(features.items()):
             # data: [B, dim], action: [B, num_stocks]
@@ -263,7 +263,7 @@ def process_data(data_dict, device="cuda:0"):
            labels, pyg_data, mask
 
 
-# 用于创建占位环境，后续使用model.set_env()进行更新
+# Create a placeholder environment that can later be swapped via model.set_env()
 def create_env_init(args, dataset=None, data_loader=None):
     if data_loader is None:
         data_loader = DataLoader(dataset, batch_size=len(dataset), pin_memory=True, collate_fn=lambda x: x,
@@ -276,7 +276,7 @@ def create_env_init(args, dataset=None, data_loader=None):
                                 ind_yn=args.ind_yn, pos_yn=args.pos_yn, neg_yn=args.neg_yn)
         env.seed(seed=args.seed)
         env, _ = env.get_sb_env()
-        print("占位环境创建完成")
+        print("Environment created")
         return env
 
 
@@ -426,42 +426,17 @@ def model_predict(args, model, test_loader, split: str = "test"):
 
 
 def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
-    # --- 生成专家轨迹 ---
-    expert_type = getattr(args, 'expert_type', 'ga')  # Options: 'ga', 'ensemble', 'heuristic'
-    
-    if expert_type == 'ensemble':
-        print("\n" + "="*70)
-        print("Using Hybrid Ensemble Expert Generation")
-        print("="*70)
-        from gen_data.gen_expert_ensemble import generate_expert_trajectories
-        expert_trajectories = generate_expert_trajectories(
-            args, 
-            train_loader.dataset, 
-            num_trajectories=100
-        )
-    elif expert_type == 'ga':
-        print("\n" + "="*70)
-        print("Using GA-Enhanced Expert Generation")
-        print("="*70)
-        from gen_data.generate_expert_ga import generate_expert_trajectories_ga
-        expert_trajectories = generate_expert_trajectories_ga(
-            args, 
-            train_loader.dataset, 
-            num_trajectories=1000,
-            risk_category='conservative',
-            ga_generations=getattr(args, 'ga_generations', 30)
-        )
+    print("\n" + "=" * 70)
+    print("Using Hybrid Ensemble Expert Generation")
+    print("=" * 70)
+    from gen_data.gen_expert_ensemble import generate_expert_trajectories
+    expert_trajectories = generate_expert_trajectories(
+        args,
+        train_loader.dataset,
+        num_trajectories=50
+    )
 
-    else:  # 'heuristic' or fallback
-        print("\n" + "="*70)
-        print("Using Original Heuristic Expert Generation")
-        print("="*70)
-        from gen_data.generate_expert import generate_expert_trajectories
-        expert_trajectories = generate_expert_trajectories(
-            args, train_loader.dataset, num_trajectories=10000
-        )
-
-    # --- 初始化IRL奖励网络 ---
+    # --- Initialize the IRL reward network ---
     # With flattened observation format:
     # obs_len = 3 * num_stocks^2 + num_stocks * input_dim
     obs_len = 3 * args.num_stocks * args.num_stocks + args.num_stocks * args.input_dim
@@ -492,13 +467,13 @@ def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
     env_train = create_env_init(args, data_loader=train_loader)
     for i in range(args.max_epochs):
         print(f"\n=== Epoch {i+1}/{args.max_epochs} ===")
-        # 1. 训练IRL奖励函数
+        # 1. Train the IRL reward function
         irl_epochs = getattr(args, 'irl_epochs', 50)
         irl_trainer.train(env_train, model, num_epochs=irl_epochs,
                           batch_size=args.batch_size, device=args.device)
         print("reward net train over.")
 
-        # 2. 更新RL环境使用新奖励函数 - 只用第一个batch
+        # 2. Update the RL environment with the new reward function (only the first batch)
         for batch_idx, data in enumerate(train_loader):
             if batch_idx > 0:  # Only process first batch
                 break
@@ -513,10 +488,10 @@ def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
             env_train, _ = env_train.get_sb_env()
             model.set_env(env_train)
             rl_timesteps = getattr(args, 'rl_timesteps', 10000)
-            # 3. 训练RL代理
+            # 3. Train the RL agent
             print(f"Training RL agent for {rl_timesteps} timesteps...")
             model = model.learn(total_timesteps=rl_timesteps)
-            # 可选评估：留给环境统计输出
+            # Optional evaluation is logged inside the environment callbacks
             mean_reward, std_reward = evaluate_policy(model, env_train, n_eval_episodes=1)
             print(f"Evaluation after RL training: Mean Reward = {mean_reward:.4f}, Std Reward = {std_reward:.4f}")
         # 4. Intermediate test evaluation to print ARR/AVOL/Sharpe/MDD/CR/IR

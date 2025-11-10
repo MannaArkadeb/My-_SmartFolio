@@ -402,7 +402,7 @@ def save_daily_graph(dt: str,
 
 def main():
     parser = argparse.ArgumentParser(description="Build SmartFolio-compatible dataset from yfinance")
-    parser.add_argument("--market", default="custom", help="Market name tag to use in output paths (e.g., sp500, nd100, custom)")
+    parser.add_argument("--market", default="custom", help="Market name tag to use in output paths (default: custom)")
     parser.add_argument("--tickers_file", default=None, help="CSV with a 'kdcode' or 'ticker' column listing symbols")
     parser.add_argument("--tickers", default=None, help="Comma-separated ticker list if no file is provided")
     parser.add_argument("--start", required=True, help="Start date YYYY-MM-DD")

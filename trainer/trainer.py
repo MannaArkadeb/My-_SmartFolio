@@ -58,7 +58,7 @@ def train_model_one(args, train_loader):
         return trained_model
 
 
-# 用于创建占位环境，后续使用model.set_env()进行更新
+# Create a placeholder environment that can later be swapped via model.set_env()
 def create_env_init(args, dataset=None, data_loader=None):
     if data_loader is None:
         data_loader = DataLoader(dataset, batch_size=len(dataset), pin_memory=True, collate_fn=lambda x: x,
@@ -68,11 +68,11 @@ def create_env_init(args, dataset=None, data_loader=None):
         env = StockPortfolioEnv(args, corr, ts_features, features, labels, pyg_data)
         env.seed(seed=args.seed)
         env, _ = env.get_sb_env()
-        print("占位环境创建完成")
+        print("Placeholder environment created")
         return env
 
 
-# train切分batch进行train
+# Train by iterating over mini-batches
 def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
     env_val = create_env_init(args, data_loader=val_loader)
     for i in range(args.max_epochs):
@@ -88,7 +88,7 @@ def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
             epoch_reward += batch_reward
         mean_reward, std_reward = evaluate_policy(model, env_val, n_eval_episodes=1)
         print(f"Epoch total reward: {epoch_reward},"
-              f" Val 平均奖励: {mean_reward}, 标准差: {std_reward}")
+              f" Val mean reward: {mean_reward}, Std: {std_reward}")
         model_predict(args, trained_model, test_loader)
 
 
@@ -107,10 +107,10 @@ def train_model_and_predict_hierarchical(model, args, train_loader, val_loader, 
             epoch_reward += batch_reward
         mean_reward, std_reward = evaluate_policy(model, env_val, n_eval_episodes=1)
         print(f"Epoch total reward: {epoch_reward},"
-              f" Val 平均奖励: {mean_reward}, 标准差: {std_reward}")
+              f" Val mean reward: {mean_reward}, Std: {std_reward}")
         model_predict(args, trained_model, test_loader)
 
-# 使用一整个train的时序作为一个batch
+# Treat the entire training sequence as a single batch
 def train_and_predict(args, train_loader, test_loader):
     for batch_idx, data in enumerate(train_loader):
         corr, ts_features, features, labels, pyg_data, mask = process_data(data, device=args.device)
@@ -125,9 +125,9 @@ def train_and_predict(args, train_loader, test_loader):
                         device='cuda:0')
         for i in range(args.max_epochs):
             trained_model = model.learn(total_timesteps=1000)
-            # 评估训练后的模型
+            # Evaluate the trained model
             mean_reward, std_reward = evaluate_policy(model, env_train, n_eval_episodes=1)
-            print(f"平均奖励: {mean_reward}, 标准差: {std_reward}")
+            print(f"Mean reward: {mean_reward}, Std: {std_reward}")
             model_predict(args, trained_model, test_loader)
         return trained_model
 
@@ -183,4 +183,3 @@ def model_predict(args, model, test_loader, split: str = "test"):
         "summary": summary,
         "log": log_info,
     }
-

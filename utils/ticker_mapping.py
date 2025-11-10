@@ -14,7 +14,7 @@ def load_ticker_mapping(market: str, date: str,
     """Load ticker list for a specific date from daily_stock CSV.
     
     Args:
-        market: Market name (e.g., 'custom', 'hs300')
+        market: Market name (custom-only path)
         date: Date string in format 'YYYY-MM-DD'
         base_dir: Root directory of dataset
         

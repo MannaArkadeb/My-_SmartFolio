@@ -45,7 +45,7 @@ STOCK_DATA_PATH = f"../dataset/"
 
 if __name__ == '__main__':
     # 2018-01-01 - 2024-12-12
-    market = 'hs300'
+    market = 'custom'
     train_start_date = '2018-01-01'
     train_end_date = '2022-12-31'
     eval_start_date = '2023-01-01'
@@ -95,12 +95,12 @@ if __name__ == '__main__':
         if not os.path.exists(corr_path):
             os.makedirs(corr_path)
 
-        # 检查是否已经是该月的最后一天
+        # Check whether we're already on the last calendar day of the month
         end_date = pd.to_datetime(end_date)
         if end_date.day == end_date.replace(day=1).days_in_month:
             relation_dt = end_date
         else:
-            relation_dt = end_date + MonthEnd(1)    # 该月最后一天（非最后一个交易日）
+            relation_dt = end_date + MonthEnd(1)    # Use the calendar month-end (not necessarily a trading day)
         relation_dt = relation_dt.strftime('%Y-%m-%d')
 
         print(relation_dt)

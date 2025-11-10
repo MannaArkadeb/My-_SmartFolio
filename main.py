@@ -238,15 +238,14 @@ def train_predict(args, predict_dt):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Transaction ..")
     parser.add_argument("-device", "-d", default="cuda:0", help="gpu")
-    parser.add_argument("-model_name", "-nm", default="SmartFolio", help="模型名称")
-    parser.add_argument("-market", "-mkt", default="hs300", help="股票市场")
-    parser.add_argument("-horizon", "-hrz", default="1", help="预测距离")
-    parser.add_argument("-relation_type", "-rt", default="hy", help="股票关系类型")
-    parser.add_argument("-ind_yn", "-ind", default="y", help="是否加入行业关系图")
-    parser.add_argument("-pos_yn", "-pos", default="y", help="是否加入动量关系图")
-    parser.add_argument("-neg_yn", "-neg", default="y", help="是否加入反转关系图")
-    parser.add_argument("-multi_reward_yn", "-mr", default="y", help="是否加入多奖励学习")
-    parser.add_argument("-policy", "-p", default="MLP", help="策略网络")
+    parser.add_argument("-model_name", "-nm", default="SmartFolio", help="Model name used in checkpoints and logs")
+    parser.add_argument("-horizon", "-hrz", default="1", help="Return prediction horizon in trading days")
+    parser.add_argument("-relation_type", "-rt", default="hy", help="Correlation relation type label")
+    parser.add_argument("-ind_yn", "-ind", default="y", help="Enable industry relation graph")
+    parser.add_argument("-pos_yn", "-pos", default="y", help="Enable momentum relation graph")
+    parser.add_argument("-neg_yn", "-neg", default="y", help="Enable reversal relation graph")
+    parser.add_argument("-multi_reward_yn", "-mr", default="y", help="Enable multi-reward IRL head")
+    parser.add_argument("-policy", "-p", default="MLP", help="Policy architecture identifier")
     # continual learning / resume
     parser.add_argument("--resume_model_path", default=None, help="Path to previously saved PPO model to resume from")
     parser.add_argument("--reward_net_path", default=None, help="Path to saved IRL reward network state_dict to resume from")
@@ -263,18 +262,14 @@ if __name__ == '__main__':
     # Training hyperparameters
     parser.add_argument("--irl_epochs", type=int, default=50, help="Number of IRL training epochs")
     parser.add_argument("--rl_timesteps", type=int, default=10000, help="Number of RL timesteps for training")
-    parser.add_argument("--ga_generations", type=int, default=30, help="Number of GA generations for expert generation")
-    # Expert generation strategy
-    parser.add_argument("--expert_type", type=str, default="ga", 
-                        choices=["ga", "ensemble", "heuristic"],
-                        help="Expert generation strategy: ga=Genetic Algorithm, ensemble=Hybrid Ensemble (MV+RP+MinVar+MaxSharpe), heuristic=Original")
     # Risk-adaptive reward parameters
     parser.add_argument("--risk_score", type=float, default=0.5, help="User risk score: 0=conservative, 1=aggressive")
     parser.add_argument("--dd_base_weight", type=float, default=1.0, help="Base weight for drawdown penalty")
     parser.add_argument("--dd_risk_factor", type=float, default=1.0, help="Risk factor k in β_dd(ρ) = β_base*(1+k*(1-ρ))")
     args = parser.parse_args()
+    args.market = 'custom'
 
-    # debug 用参数设置
+    # Default training range (override via CLI if desired)
     args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
     args.model_name = 'SmartFolio'
     args.relation_type = 'hy'
@@ -327,11 +322,9 @@ if __name__ == '__main__':
     args.pos_yn = True
     args.neg_yn = True
     args.multi_reward = True
-    args.use_ga_expert = True  # Use GA for expert generation (set False for original heuristic)
     # Training hyperparameters (can be overridden via command line)
     args.irl_epochs = getattr(args, 'irl_epochs', 50)
     args.rl_timesteps = getattr(args, 'rl_timesteps', 10000)
-    args.ga_generations = getattr(args, 'ga_generations', 30)
     # Risk-adaptive reward parameters
     args.risk_score = getattr(args, 'risk_score', 0.5)
     args.dd_base_weight = getattr(args, 'dd_base_weight', 1.0)
@@ -339,46 +332,19 @@ if __name__ == '__main__':
     # ensure save dir
     os.makedirs(args.save_dir, exist_ok=True)
 
-    if args.market == 'hs300':
-        print("Setting num_stocks for HS300")
-        args.num_stocks = 102
-    elif args.market == 'zz500':
-        args.num_stocks = 80
-    elif args.market == 'nd100':
-        args.num_stocks = 84
-    elif args.market == 'sp500':
-        args.num_stocks = 472
-    elif args.market == 'custom':
-        # Auto-detect num_stocks from a sample pickle file
-        data_dir = f'dataset_default/data_train_predict_{args.market}/{args.horizon}_{args.relation_type}/'
-        sample_files = [f for f in os.listdir(data_dir) if f.endswith('.pkl')]
-        if sample_files:
-            import pickle
-            sample_path = os.path.join(data_dir, sample_files[0])
-            with open(sample_path, 'rb') as f:
-                sample_data = pickle.load(f)
-            # features shape is [num_stocks, feature_dim], so use shape[0]
-            args.num_stocks = sample_data['features'].shape[0]
-            print(f"Auto-detected num_stocks for custom market: {args.num_stocks}")
-        else:
-            raise ValueError(f"No pickle files found in {data_dir} to determine num_stocks")
+    # Auto-detect num_stocks from a sample pickle file
+    data_dir = f'dataset_default/data_train_predict_{args.market}/{args.horizon}_{args.relation_type}/'
+    sample_files = [f for f in os.listdir(data_dir) if f.endswith('.pkl')]
+    if sample_files:
+        import pickle
+        sample_path = os.path.join(data_dir, sample_files[0])
+        with open(sample_path, 'rb') as f:
+            sample_data = pickle.load(f)
+        # features shape is [num_stocks, feature_dim], so use shape[0]
+        args.num_stocks = sample_data['features'].shape[0]
+        print(f"Auto-detected num_stocks for custom market: {args.num_stocks}")
     else:
-        # Generic fallback for unknown markets
-        data_dir = f'dataset_default/data_train_predict_{args.market}/{args.horizon}_{args.relation_type}/'
-        if os.path.exists(data_dir):
-            import pickle
-            sample_files = [f for f in os.listdir(data_dir) if f.endswith('.pkl')]
-            if sample_files:
-                sample_path = os.path.join(data_dir, sample_files[0])
-                with open(sample_path, 'rb') as f:
-                    sample_data = pickle.load(f)
-                # features shape is [num_stocks, feature_dim], so use shape[0]
-                args.num_stocks = sample_data['features'].shape[0]
-                print(f"Auto-detected num_stocks for {args.market} market: {args.num_stocks}")
-            else:
-                raise ValueError(f"No pickle files found in {data_dir} to determine num_stocks")
-        else:
-            raise ValueError(f"Unknown market {args.market} and data directory {data_dir} does not exist")
+        raise ValueError(f"No pickle files found in {data_dir} to determine num_stocks")
     print("market:", args.market, "num_stocks:", args.num_stocks)
     if args.run_monthly_fine_tune:
         checkpoint = fine_tune_month(args, manifest_path="dataset_default/data_train_predict_custom/1_corr/monthly_manifest.json")
@@ -396,7 +362,3 @@ if __name__ == '__main__':
             print(f"Skip saving PPO model here: {e}")
 
         print(1)
-
-
-
-

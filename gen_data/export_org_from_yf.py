@@ -90,7 +90,7 @@ def download_to_org_csv(
 
 def main():
     parser = argparse.ArgumentParser(description="Export yfinance OHLCV to *_org.csv for SmartFolio")
-    parser.add_argument("--market", required=True, help="Market tag used in filename, e.g., sp500, dji, custom")
+    parser.add_argument("--market", required=True, help="Market tag used in filename (e.g., custom)")
     parser.add_argument("--tickers_file", default=None, help="CSV with 'kdcode' or 'ticker' column")
     parser.add_argument("--tickers", default=None, help="Comma-separated tickers if no file provided")
     parser.add_argument("--start", required=True, help="YYYY-MM-DD")

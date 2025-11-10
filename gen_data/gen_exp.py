@@ -24,7 +24,7 @@ def example_generate_trajectories_for_dataset():
     """
     
     class Args:
-        market = 'hs300'
+        market = 'custom'
         input_dim = 6
         ind_yn = True
         pos_yn = True
@@ -235,7 +235,7 @@ def example_integration_with_correlation():
     # (from the second file you provided)
     
     # Mock correlation data (in practice, this would be loaded from your CSV files)
-    market = 'hs300'
+    market = 'custom'
     date = '2023-01-31'
     
     # In practice, you would load this from your correlation CSV:
@@ -281,7 +281,7 @@ def example_batch_processing():
     
     print("Batch processing for multiple dates...\n")
     
-    market = 'hs300'
+    market = 'custom'
     dates = ['2023-01-31', '2023-02-28', '2023-03-31']
     
     all_trajectories = []

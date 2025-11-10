@@ -572,7 +572,7 @@ def generate_expert_trajectories(args, dataset, num_trajectories=100):
         if (traj_idx + 1) % 100 == 0:
             print(f"  Generated {traj_idx + 1}/{num_trajectories} trajectories")
     
-    print(f"\n✓ Generated {len(expert_trajectories)} trajectories")
+    print(f"\nGenerated {len(expert_trajectories)} trajectories")
     
     # Statistics for continuous weights
     all_weights = [a for _, a in expert_trajectories]
@@ -582,7 +582,6 @@ def generate_expert_trajectories(args, dataset, num_trajectories=100):
     avg_entropy = np.mean([-np.sum(w * np.log(w + 1e-8)) for w in all_weights])
     
     print(f"  Weight statistics:")
-    print(f"    - Average sum: {avg_weight_sum:.4f} (should be ~1.0)")
     print(f"    - Avg stocks with >1% allocation: {avg_nonzero:.1f}")
     print(f"    - Avg max single stock weight: {max_concentration:.1%}")
     print(f"    - Avg portfolio entropy: {avg_entropy:.2f}")
