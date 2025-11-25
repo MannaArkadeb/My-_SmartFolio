@@ -279,7 +279,8 @@ def create_env_init(args, dataset=None, data_loader=None):
         env = StockPortfolioEnv(args=args, corr=corr, ts_features=ts_features, features=features,
                                 ind=ind, pos=pos, neg=neg,
                                 returns=labels, pyg_data=pyg_data, device=args.device,
-                                ind_yn=args.ind_yn, pos_yn=args.pos_yn, neg_yn=args.neg_yn)
+                                ind_yn=args.ind_yn, pos_yn=args.pos_yn, neg_yn=args.neg_yn,
+                                risk_profile=getattr(args, 'risk_profile', None))
         env.seed(seed=args.seed)
         env, _ = env.get_sb_env()
         print("Environment created")
@@ -333,13 +334,14 @@ def model_predict(args, model, test_loader, split: str = "test"):
             ind_yn=args.ind_yn,
             pos_yn=args.pos_yn,
             neg_yn=args.neg_yn,
+            risk_profile=getattr(args, 'risk_profile', None),
         )
 
         obs_test = env_test.reset()
         max_step = len(labels)
 
         for _ in range(max_step):
-            action, _states = model.predict(obs_test, deterministic=True)
+            action, _states = model.predict(obs_test, deterministic=False)
             obs_test, reward, done, info = env_test.step(action)
             if done:
                 break
@@ -491,7 +493,8 @@ def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
                 args=args, corr=corr, ts_features=ts_features, features=features,
                 ind=ind, pos=pos, neg=neg,
                 returns=labels, pyg_data=pyg_data, reward_net=reward_net, device=args.device,
-                ind_yn=args.ind_yn, pos_yn=args.pos_yn, neg_yn=args.neg_yn
+                ind_yn=args.ind_yn, pos_yn=args.pos_yn, neg_yn=args.neg_yn,
+                risk_profile=getattr(args, 'risk_profile', None)
             )
             env_train.seed(seed=args.seed)
             env_train, _ = env_train.get_sb_env()

@@ -45,7 +45,15 @@ PPO_PARAMS = {
 def train_model_one(args, train_loader):
     for batch_idx, data in enumerate(train_loader):
         corr, ts_features, features, labels, pyg_data, mask = process_data(data, device=args.device)
-        env_train = StockPortfolioEnv(args, corr, ts_features, features, labels, pyg_data)
+        env_train = StockPortfolioEnv(
+            args,
+            corr,
+            ts_features,
+            features,
+            labels,
+            pyg_data,
+            risk_profile=getattr(args, 'risk_profile', None),
+        )
         env_train.seed(seed=args.seed)
         env_train, _ = env_train.get_sb_env()
         if args.policy == 'MLP':
@@ -65,7 +73,15 @@ def create_env_init(args, dataset=None, data_loader=None):
                                  drop_last=True)
     for batch_idx, data in enumerate(data_loader):
         corr, ts_features, features, labels, pyg_data, mask = process_data(data, device=args.device)
-        env = StockPortfolioEnv(args, corr, ts_features, features, labels, pyg_data)
+        env = StockPortfolioEnv(
+            args,
+            corr,
+            ts_features,
+            features,
+            labels,
+            pyg_data,
+            risk_profile=getattr(args, 'risk_profile', None),
+        )
         env.seed(seed=args.seed)
         env, _ = env.get_sb_env()
         print("Placeholder environment created")
@@ -79,7 +95,15 @@ def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
         epoch_reward = 0.0
         for batch_idx, data in enumerate(train_loader):
             corr, ts_features, features, labels, pyg_data, mask = process_data(data, device=args.device)
-            env_train = StockPortfolioEnv(args, corr, ts_features, features, labels, pyg_data)
+            env_train = StockPortfolioEnv(
+                args,
+                corr,
+                ts_features,
+                features,
+                labels,
+                pyg_data,
+                risk_profile=getattr(args, 'risk_profile', None),
+            )
             env_train.seed(seed=args.seed)
             env_train, _ = env_train.get_sb_env()
             model.set_env(env_train)
@@ -98,7 +122,15 @@ def train_model_and_predict_hierarchical(model, args, train_loader, val_loader, 
         epoch_reward = 0.0
         for batch_idx, data in enumerate(train_loader):
             corr, ts_features, features, labels, pyg_data, mask = process_data(data, device=args.device)
-            env_train = StockPortfolioEnv(args, corr, ts_features, features, labels, pyg_data)
+            env_train = StockPortfolioEnv(
+                args,
+                corr,
+                ts_features,
+                features,
+                labels,
+                pyg_data,
+                risk_profile=getattr(args, 'risk_profile', None),
+            )
             env_train.seed(seed=args.seed)
             env_train, _ = env_train.get_sb_env()
             model.set_env(env_train)
@@ -114,7 +146,15 @@ def train_model_and_predict_hierarchical(model, args, train_loader, val_loader, 
 def train_and_predict(args, train_loader, test_loader):
     for batch_idx, data in enumerate(train_loader):
         corr, ts_features, features, labels, pyg_data, mask = process_data(data, device=args.device)
-        env_train = StockPortfolioEnv(args, corr, ts_features, features, labels, pyg_data)
+        env_train = StockPortfolioEnv(
+            args,
+            corr,
+            ts_features,
+            features,
+            labels,
+            pyg_data,
+            risk_profile=getattr(args, 'risk_profile', None),
+        )
         env_train.seed(seed=args.seed)
         env_train, _ = env_train.get_sb_env()
         if args.policy == 'MLP':
@@ -145,8 +185,17 @@ def model_predict(args, model, test_loader, split: str = "test"):
 
     for batch_idx, data in enumerate(test_loader):
         corr, ts_features, features, labels, pyg_data, mask = process_data(data, device=args.device)
-        env_test = StockPortfolioEnv(args, corr, ts_features, features, labels, pyg_data, benchmark_return,
-                                     mode="test")
+        env_test = StockPortfolioEnv(
+            args,
+            corr,
+            ts_features,
+            features,
+            labels,
+            pyg_data,
+            benchmark_return,
+            mode="test",
+            risk_profile=getattr(args, 'risk_profile', None),
+        )
         env_vec, obs_test = env_test.get_sb_env()
         env_vec.reset()
         max_step = len(labels)

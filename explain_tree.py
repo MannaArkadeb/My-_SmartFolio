@@ -31,6 +31,7 @@ import joblib
 from dataloader.data_loader import AllGraphDataSampler
 from env.portfolio_env import StockPortfolioEnv
 from stable_baselines3 import PPO
+from utils.risk_profile import build_risk_profile
 
 
 def process_data(data_dict, device="cpu"):
@@ -110,7 +111,8 @@ def collect_trajectories_from_loader(test_loader, model, args, device='cpu'):
             mode="test",
             ind_yn=args.ind_yn,
             pos_yn=args.pos_yn,
-            neg_yn=args.neg_yn
+            neg_yn=args.neg_yn,
+            risk_profile=getattr(args, 'risk_profile', None)
         )
         
         # Get vectorized environment
@@ -168,6 +170,7 @@ def main():
     parser.add_argument('--stock-index', type=int, default=0, help='Which stock to explain')
     parser.add_argument('--top-k-stocks', type=int, default=5, help='Number of top stocks to explain')
     parser.add_argument('--device', default='cpu', help='Device for data loading')
+    parser.add_argument('--risk-score', type=float, default=0.5, help='User risk score for env constraints')
     args = parser.parse_args()
     args.market = 'custom'
     
@@ -199,6 +202,8 @@ def main():
     args.ind_yn = True
     args.pos_yn = True
     args.neg_yn = True
+    args.risk_score = getattr(args, 'risk_score', 0.5)
+    args.risk_profile = build_risk_profile(args.risk_score)
     
     print(f"\nConfiguration:")
     print(f"  Market: {args.market}")

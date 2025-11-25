@@ -9,7 +9,7 @@ class StockPortfolioEnv(gym.Env):
     def __init__(self, args, corr=None, ts_features=None, features=None,
                  ind=None, pos=None, neg=None, returns=None, pyg_data=None,
                  benchmark_return=None, mode="train", reward_net=None, device='cuda:0',
-                 ind_yn=False, pos_yn=False, neg_yn=False):
+                 ind_yn=False, pos_yn=False, neg_yn=False, risk_profile=None):
         super(StockPortfolioEnv, self).__init__()
         self.current_step = 0
         self.max_step = returns.shape[0] - 1
@@ -37,6 +37,12 @@ class StockPortfolioEnv(gym.Env):
         self.ind_yn = ind_yn
         self.pos_yn = pos_yn
         self.neg_yn = neg_yn
+        self.risk_profile = risk_profile or {}
+        self.risk_score = float(self.risk_profile.get('risk_score', getattr(args, 'risk_score', 0.5)))
+        self.max_weight_cap = self.risk_profile.get('max_weight', None)
+        self.min_weight_floor = self.risk_profile.get('min_weight', 0.0)
+        # Conservative users (low score) get higher temperature to spread allocations
+        self.action_temperature = max(1e-3, 1.0 + (1.0 - self.risk_score))
 
         # Action space: continuous weights for each stock
         # Output raw scores, will be normalized via softmax to sum to 1
@@ -157,8 +163,9 @@ class StockPortfolioEnv(gym.Env):
             action_scores = np.array(actions).flatten()
             
             # Softmax normalization: w_i = exp(a_i) / sum(exp(a_j))
-            exp_actions = np.exp(action_scores - np.max(action_scores))  # Numerical stability
+            exp_actions = np.exp((action_scores - np.max(action_scores)) / self.action_temperature)  # Temperature controls concentration
             weights = exp_actions / exp_actions.sum()
+            weights = self._apply_risk_constraints(weights)
             
             # Store weights for this step
             self.weights_history.append(weights.copy())
@@ -184,7 +191,12 @@ class StockPortfolioEnv(gym.Env):
                 wealth_info = torch.FloatTensor([self.net_value, self.peak_value]).to(self.device)
                 
                 with torch.no_grad():
-                    self.reward = self.reward_net(state_tensor, action_tensor, wealth_info).mean().cpu().item()
+                    self.reward = self.reward_net(
+                        state_tensor,
+                        action_tensor,
+                        wealth_info,
+                        risk_score=self.risk_score
+                    ).mean().cpu().item()
             else:
                 # Portfolio return: weighted sum of individual stock returns
                 self.reward = np.dot(weights, np.array(self.ror))
@@ -195,6 +207,19 @@ class StockPortfolioEnv(gym.Env):
             self.net_value_s.append(self.net_value)
 
         return self.observation, self.reward, self.done, {}
+
+    def _apply_risk_constraints(self, weights):
+        """Apply simple weight caps/floors derived from the risk profile."""
+        if self.max_weight_cap is not None and self.max_weight_cap > 0:
+            clipped = np.minimum(weights, self.max_weight_cap)
+            # Optional floor to avoid zeroing everything for aggressive users
+            if self.min_weight_floor > 0:
+                clipped = np.maximum(clipped, self.min_weight_floor)
+            total = clipped.sum()
+            if total > 1e-8:
+                return clipped / total
+            return np.ones_like(weights) / len(weights)
+        return weights
 
     def get_sb_env(self):
         e = DummyVecEnv([lambda: self])
