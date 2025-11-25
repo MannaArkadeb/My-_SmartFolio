@@ -40,10 +40,11 @@ class RewardNetwork(nn.Module):
 
 # Maximum entropy IRL trainer
 class MaxEntIRL:
-    def __init__(self, reward_net, expert_data, lr=1e-3):
+    def __init__(self, reward_net, expert_data, lr=1e-3, risk_score: float = 0.5):
         self.reward_net = reward_net
         self.expert_data = expert_data
         self.optimizer = torch.optim.Adam(reward_net.parameters(), lr=lr)
+        self.risk_score = float(risk_score)
 
     def train(self, agent_env, model, num_epochs=50, batch_size=32, device='cuda:0'):
         for epoch in range(num_epochs):
@@ -115,7 +116,12 @@ class MaxEntIRL:
             
             # For expert trajectories, we don't have wealth info, so pass None
             # The reward network will handle this appropriately
-            reward = self.reward_net(state_tensor, action_tensor, wealth_info=None)
+            reward = self.reward_net(
+                state_tensor,
+                action_tensor,
+                wealth_info=None,
+                risk_score=self.risk_score,
+            )
             rewards.append(reward)
         return torch.cat(rewards)
 
@@ -433,7 +439,8 @@ def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
     expert_trajectories = generate_expert_trajectories(
         args,
         train_loader.dataset,
-        num_trajectories=50
+        num_trajectories=50,
+        risk_profile=getattr(args, "risk_profile", None),
     )
 
     # --- Initialize the IRL reward network ---
@@ -461,7 +468,9 @@ def train_model_and_predict(model, args, train_loader, val_loader, test_loader):
             reward_net.load_state_dict(state)
         except Exception as e:
             print(f"Warning: failed to load reward net: {e}")
-    irl_trainer = MaxEntIRL(reward_net, expert_trajectories, lr=1e-4)
+    profile = getattr(args, "risk_profile", None)
+    risk_score_value = profile.get("risk_score", getattr(args, "risk_score", 0.5)) if profile else getattr(args, "risk_score", 0.5)
+    irl_trainer = MaxEntIRL(reward_net, expert_trajectories, lr=1e-4, risk_score=risk_score_value)
 
     # --- train ---
     env_train = create_env_init(args, data_loader=train_loader)

@@ -15,6 +15,7 @@ from policy.policy import *
 from stable_baselines3 import PPO
 from trainer.irl_trainer import *
 from torch_geometric.loader import DataLoader
+from utils.risk_profile import build_risk_profile
 
 PATH_DATA = f'./dataset/'
 
@@ -329,6 +330,7 @@ if __name__ == '__main__':
     args.risk_score = getattr(args, 'risk_score', 0.5)
     args.dd_base_weight = getattr(args, 'dd_base_weight', 1.0)
     args.dd_risk_factor = getattr(args, 'dd_risk_factor', 1.0)
+    args.risk_profile = build_risk_profile(args.risk_score)
     # ensure save dir
     os.makedirs(args.save_dir, exist_ok=True)
 

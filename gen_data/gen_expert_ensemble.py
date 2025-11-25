@@ -346,13 +346,23 @@ class HybridEnsembleExpert:
     Hybrid ensemble of multiple expert strategies
     """
     
-    def __init__(self, ensemble_weights=None, randomize_params=True):
+    def __init__(self, ensemble_weights=None, randomize_params=True, risk_profile=None):
         """
         Args:
             ensemble_weights: Dict of weights for each expert method
             randomize_params: Whether to randomize parameters for diversity
+            risk_profile: Optional dict describing desired risk posture
         """
-        if ensemble_weights is None:
+        self.risk_profile = risk_profile or {}
+        self.randomize_params = randomize_params
+        self.risk_score = float(self.risk_profile.get('risk_score', 0.5))
+        self.max_weight = self.risk_profile.get('max_weight', 0.3)
+        self.min_weight = self.risk_profile.get('min_weight', 0.01)
+
+        profile_weights = self.risk_profile.get('ensemble_weights')
+        if profile_weights:
+            ensemble_weights = profile_weights
+        elif ensemble_weights is None:
             ensemble_weights = {
                 'robust_markowitz': 0.3,
                 'black_litterman': 0.25,
@@ -361,10 +371,11 @@ class HybridEnsembleExpert:
             }
         
         self.ensemble_weights = ensemble_weights
-        self.randomize_params = randomize_params
         
         # Normalize weights
         total = sum(self.ensemble_weights.values())
+        if total <= 0:
+            total = 1.0
         self.ensemble_weights = {k: v/total for k, v in self.ensemble_weights.items()}
     
     def _get_randomized_params(self, method):
@@ -373,18 +384,26 @@ class HybridEnsembleExpert:
             return {}
         
         if method == 'robust_markowitz':
+            ra_low, ra_high = self.risk_profile.get('markowitz_ra_range', (0.5, 3.0))
             return {
-                'risk_aversion': np.random.uniform(0.5, 3.0),
+                'risk_aversion': np.random.uniform(ra_low, ra_high),
                 'regularization': np.random.uniform(0.001, 0.05),
                 'shrinkage_method': np.random.choice(['ledoit_wolf', 'oas'])
             }
         elif method == 'black_litterman':
+            ra_low, ra_high = self.risk_profile.get('black_litterman_ra_range', (1.0, 4.0))
             return {
                 'tau': np.random.uniform(0.01, 0.1),
-                'risk_aversion': np.random.uniform(1.0, 4.0)
+                'risk_aversion': np.random.uniform(ra_low, ra_high)
             }
         else:
             return {}
+    
+    def _build_constraints(self, constraints=None):
+        base = constraints.copy() if constraints else {}
+        base.setdefault('max_weight', self.max_weight)
+        base.setdefault('min_weight', self.min_weight)
+        return base
     
     def generate_expert_action(self, returns, correlation_matrix, industry_matrix,
                               pos_matrix=None, neg_matrix=None, constraints=None):
@@ -396,11 +415,7 @@ class HybridEnsembleExpert:
         """
         n_assets = len(returns)
         
-        if constraints is None:
-            constraints = {
-                'max_weight': 0.3,
-                'min_weight': 0.01,
-            }
+        constraints = self._build_constraints(constraints)
         
         # Initialize experts
         experts = {}
@@ -492,7 +507,7 @@ class HybridEnsembleExpert:
         return ensemble_weights  
 
 
-def generate_expert_trajectories(args, dataset, num_trajectories=100):
+def generate_expert_trajectories(args, dataset, num_trajectories=100, risk_profile=None):
     """
     Generate expert trajectories using hybrid ensemble
     Returns:
@@ -503,9 +518,12 @@ def generate_expert_trajectories(args, dataset, num_trajectories=100):
     print(f"\nGenerating {num_trajectories} Ensemble expert trajectories")
     print(f"Ensemble strategy: Hybrid (Markowitz + BL + RP + HRP)")
     print("="*60)
+    if risk_profile:
+        print(f"Risk-aware expert profile: score={risk_profile.get('risk_score', 0.5):.2f}, "
+              f"max_weight={risk_profile.get('max_weight', 0.3):.2f}")
     
     # Initialize hybrid ensemble expert
-    expert = HybridEnsembleExpert(randomize_params=True)
+    expert = HybridEnsembleExpert(randomize_params=True, risk_profile=risk_profile)
     
     for traj_idx in range(num_trajectories):
         # Randomly select a data point
@@ -524,8 +542,8 @@ def generate_expert_trajectories(args, dataset, num_trajectories=100):
         
         # Set constraints
         constraints = {
-            'max_weight': 0.3,
-            'min_weight': 0.01,
+            'max_weight': risk_profile.get('max_weight', 0.3) if risk_profile else 0.3,
+            'min_weight': risk_profile.get('min_weight', 0.01) if risk_profile else 0.01,
         }
         
         try:
