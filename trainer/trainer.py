@@ -13,6 +13,7 @@ from trainer.evaluation_utils import (
     create_metric_record,
     persist_metrics,
 )
+from trainer.persistent_ppo import PersistentPPO
 
 def mse_loss(logits, targets):
     mse = nn.MSELoss()
@@ -57,11 +58,28 @@ def train_model_one(args, train_loader):
         env_train.seed(seed=args.seed)
         env_train, _ = env_train.get_sb_env()
         if args.policy == 'MLP':
-            model = PPO(policy='MlpPolicy',
-                        env=env_train,
-                        **PPO_PARAMS,
-                        seed=args.seed,
-                        device='cuda:0')
+            # Use PersistentPPO if baseline checkpoint and persistency lambda are provided
+            baseline_checkpoint = getattr(args, 'baseline_checkpoint', None)
+            persistency_lambda = getattr(args, 'persistency_lambda', 0.0)
+            
+            if baseline_checkpoint and persistency_lambda > 0:
+                model = PersistentPPO(
+                    policy='MlpPolicy',
+                    env=env_train,
+                    baseline_checkpoint=baseline_checkpoint,
+                    persistency_lambda=persistency_lambda,
+                    **PPO_PARAMS,
+                    seed=args.seed,
+                    device='cuda:0'
+                )
+            else:
+                model = PPO(
+                    policy='MlpPolicy',
+                    env=env_train,
+                    **PPO_PARAMS,
+                    seed=args.seed,
+                    device='cuda:0'
+                )
         trained_model = model.learn(total_timesteps=1000)
         return trained_model
 

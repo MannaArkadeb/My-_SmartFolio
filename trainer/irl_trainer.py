@@ -15,6 +15,7 @@ from trainer.evaluation_utils import (
     create_metric_record,
     persist_metrics,
 )
+from trainer.persistent_ppo import PersistentPPO
 from utils.ticker_mapping import (
     get_ticker_mapping_for_period,
     load_ticker_mapping,

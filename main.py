@@ -16,8 +16,9 @@ from stable_baselines3 import PPO
 from trainer.irl_trainer import *
 from torch_geometric.loader import DataLoader
 from utils.risk_profile import build_risk_profile
-from tools.pathway_temporal import discover_monthly_shards_with_pathway
-from tools.pathway_monthly_builder import build_monthly_shards_with_pathway
+# Pathway imports - only needed for --discover_months_with_pathway flag
+# from tools.pathway_temporal import discover_monthly_shards_with_pathway
+# from tools.pathway_monthly_builder import build_monthly_shards_with_pathway
 
 PATH_DATA = f'./dataset/'
 
@@ -64,21 +65,10 @@ def fine_tune_month(args, manifest_path="monthly_manifest.json", bookkeeping_pat
     manifest_file = manifest_path
     if not os.path.exists(manifest_file) and getattr(args, "discover_months_with_pathway", False):
         # If manifest is missing, attempt to build it via Pathway monthly builder.
-        base_dir_guess = f'dataset_default/data_train_predict_{args.market}/{args.horizon}_{args.relation_type}/'
-        try:
-            shards = build_monthly_shards_with_pathway(
-                base_dir_guess,
-                manifest_file,
-                min_days=getattr(args, "min_month_days", 10),
-                cutoff_days=getattr(args, "month_cutoff_days", None),
-            )
-            print(
-                f"Built manifest at {manifest_file} with {len(shards)} monthly shards from {base_dir_guess}"
-            )
-        except Exception as exc:
-            raise FileNotFoundError(
-                f"Monthly manifest not found at {manifest_file} and Pathway build failed: {exc}"
-            )
+        raise RuntimeError(
+            "Pathway features (--discover_months_with_pathway) require Pathway package. "
+            "Please run this command in WSL where Pathway is installed, or create the manifest manually."
+        )
     elif not os.path.exists(manifest_file):
         raise FileNotFoundError(f"Monthly manifest not found at {manifest_file}")
 
@@ -89,28 +79,10 @@ def fine_tune_month(args, manifest_path="monthly_manifest.json", bookkeeping_pat
     print(shards)
     # If manifest lacks shards, optionally discover them using Pathway temporal.session windowing.
     if (not shards) and getattr(args, "discover_months_with_pathway", False):
-        base_dir_guess = manifest.get(
-            "base_dir",
-            f'dataset_default/data_train_predict_{args.market}/{args.horizon}_{args.relation_type}/',
+        raise RuntimeError(
+            "Pathway features (--discover_months_with_pathway) require Pathway package. "
+            "Please run this command in WSL where Pathway is installed, or create the manifest manually."
         )
-        try:
-            discovered = build_monthly_shards_with_pathway(
-                base_dir_guess,
-                manifest_file,
-                min_days=getattr(args, "min_month_days", 10),
-                cutoff_days=getattr(args, "month_cutoff_days", None),
-            )
-            shards = discovered
-            manifest["monthly_shards"] = discovered
-            manifest["base_dir"] = base_dir_guess
-            with open(manifest_file, "w", encoding="utf-8") as fh:
-                json.dump(manifest, fh, indent=2)
-            print(
-                f"Discovered {len(discovered)} monthly shards via Pathway windows; "
-                f"updated manifest at {manifest_file}"
-            )
-        except Exception as exc:  # pragma: no cover - defensive for unexpected Pathway errors
-            print(f"Pathway month discovery failed: {exc}")
     if not shards:
         raise ValueError("Manifest does not contain any 'monthly_shards'")
 
@@ -251,13 +223,43 @@ def train_predict(args, predict_dt):
     if args.policy == 'MLP':
         if getattr(args, 'resume_model_path', None) and os.path.exists(args.resume_model_path):
             print(f"Loading PPO model from {args.resume_model_path}")
-            model = PPO.load(args.resume_model_path, env=env_init, device=args.device)
+            # Check if we should use PersistentPPO for fine-tuning
+            baseline_checkpoint = getattr(args, 'baseline_checkpoint', None)
+            persistency_lambda = getattr(args, 'persistency_lambda', 0.0)
+            
+            if baseline_checkpoint and persistency_lambda > 0:
+                model = PersistentPPO.load(
+                    args.resume_model_path,
+                    env=env_init,
+                    device=args.device,
+                    baseline_checkpoint=baseline_checkpoint,
+                    persistency_lambda=persistency_lambda
+                )
+            else:
+                model = PPO.load(args.resume_model_path, env=env_init, device=args.device)
         else:
-            model = PPO(policy='MlpPolicy',
-                        env=env_init,
-                        **PPO_PARAMS,
-                        seed=args.seed,
-                        device=args.device)
+            # New model training
+            baseline_checkpoint = getattr(args, 'baseline_checkpoint', None)
+            persistency_lambda = getattr(args, 'persistency_lambda', 0.0)
+            
+            if baseline_checkpoint and persistency_lambda > 0:
+                model = PersistentPPO(
+                    policy='MlpPolicy',
+                    env=env_init,
+                    baseline_checkpoint=baseline_checkpoint,
+                    persistency_lambda=persistency_lambda,
+                    **PPO_PARAMS,
+                    seed=args.seed,
+                    device=args.device
+                )
+            else:
+                model = PPO(
+                    policy='MlpPolicy',
+                    env=env_init,
+                    **PPO_PARAMS,
+                    seed=args.seed,
+                    device=args.device
+                )
     elif args.policy == 'HGAT':
         policy_kwargs = dict(
             last_layer_dim_pi=args.num_stocks,  # Should equal num_stocks for proper initialization
@@ -269,14 +271,44 @@ def train_predict(args, predict_dt):
         )
         if getattr(args, 'resume_model_path', None) and os.path.exists(args.resume_model_path):
             print(f"Loading PPO model from {args.resume_model_path}")
-            model = PPO.load(args.resume_model_path, env=env_init, device=args.device)
+            # Check if we should use PersistentPPO for fine-tuning
+            baseline_checkpoint = getattr(args, 'baseline_checkpoint', None)
+            persistency_lambda = getattr(args, 'persistency_lambda', 0.0)
+            
+            if baseline_checkpoint and persistency_lambda > 0:
+                model = PersistentPPO.load(
+                    args.resume_model_path,
+                    env=env_init,
+                    device=args.device,
+                    baseline_checkpoint=baseline_checkpoint,
+                    persistency_lambda=persistency_lambda
+                )
+            else:
+                model = PPO.load(args.resume_model_path, env=env_init, device=args.device)
         else:
-            model = PPO(policy=HGATActorCriticPolicy,
-                        env=env_init,
-                        policy_kwargs=policy_kwargs,
-                        **PPO_PARAMS,
-                        seed=args.seed,
-                        device=args.device)
+            baseline_checkpoint = getattr(args, 'baseline_checkpoint', None)
+            persistency_lambda = getattr(args, 'persistency_lambda', 0.0)
+            
+            if baseline_checkpoint and persistency_lambda > 0:
+                model = PersistentPPO(
+                    policy=HGATActorCriticPolicy,
+                    env=env_init,
+                    policy_kwargs=policy_kwargs,
+                    baseline_checkpoint=baseline_checkpoint,
+                    persistency_lambda=persistency_lambda,
+                    **PPO_PARAMS,
+                    seed=args.seed,
+                    device=args.device
+                )
+            else:
+                model = PPO(
+                    policy=HGATActorCriticPolicy,
+                    env=env_init,
+                    policy_kwargs=policy_kwargs,
+                    **PPO_PARAMS,
+                    seed=args.seed,
+                    device=args.device
+                )
     train_model_and_predict(model, args, train_loader, val_loader, test_loader)
 
 
@@ -298,6 +330,8 @@ if __name__ == '__main__':
     parser.add_argument("--save_dir", default="./checkpoints", help="Directory to save trained models")
     parser.add_argument("--baseline_checkpoint", default="./checkpoints/baseline.zip",
                         help="Destination checkpoint promoted after passing gating criteria")
+    parser.add_argument("--persistency_lambda", type=float, default=0.0,
+                        help="L2 penalty coefficient for persistency toward baseline (0.0 = disabled, try 1e-4 to 1e-2)")
     parser.add_argument("--promotion_min_sharpe", type=float, default=0.5,
                         help="Minimum Sharpe ratio required to promote a fine-tuned checkpoint")
     parser.add_argument("--promotion_max_drawdown", type=float, default=0.2,
