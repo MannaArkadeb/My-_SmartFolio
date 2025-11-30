@@ -1,0 +1,201 @@
+{
+  "metadata": {
+    "type": "synthetic_demo",
+    "num_stocks": 30,
+    "num_decisions": 50,
+    "stock_names": [
+      "STK000",
+      "STK001",
+      "STK002",
+      "STK003",
+      "STK004",
+      "STK005",
+      "STK006",
+      "STK007",
+      "STK008",
+      "STK009",
+      "STK010",
+      "STK011",
+      "STK012",
+      "STK013",
+      "STK014",
+      "STK015",
+      "STK016",
+      "STK017",
+      "STK018",
+      "STK019",
+      "STK020",
+      "STK021",
+      "STK022",
+      "STK023",
+      "STK024",
+      "STK025",
+      "STK026",
+      "STK027",
+      "STK028",
+      "STK029"
+    ]
+  },
+  "analyses": {
+    "correlation_pyramid": {
+      "TS_to_LSTM": {
+        "pearson": 0.9782160573110198,
+        "spearman": 0.9762285938793752
+      },
+      "LSTM_to_Logit": {
+        "pearson": 0.9924769857595956,
+        "spearman": 0.9915152922290188
+      },
+      "Logit_to_Weight": {
+        "pearson": 0.893718329237877,
+        "spearman": 0.9513153582991302
+      },
+      "TS_to_Weight": {
+        "pearson": 0.8693022338374956,
+        "spearman": 0.9214423050142447
+      },
+      "cross_sectional": {
+        "TS_to_LSTM_mean": 0.9670211345939933,
+        "TS_to_LSTM_std": 0.013511683627509046,
+        "LSTM_to_Logit_mean": 0.9861001112347051,
+        "LSTM_to_Logit_std": 0.006511059025906559,
+        "Logit_to_Weight_mean": 0.9990865885636484,
+        "Logit_to_Weight_std": 0.006110195756650299
+      }
+    },
+    "quantile_uplift": {
+      "TS_Momentum": {
+        "quantile_labels": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4",
+          "Q5",
+          "Q6",
+          "Q7",
+          "Q8",
+          "Q9",
+          "Q10"
+        ],
+        "mean_weights": [
+          0.009757077648435654,
+          0.014128129287231532,
+          0.01726006469218426,
+          0.02044547740775512,
+          0.02328512928868527,
+          0.02840169693488671,
+          0.034119286991028994,
+          0.04163702033687409,
+          0.05692186370394047,
+          0.08737758704231124
+        ],
+        "uplift_ratio": 8.955303031366205
+      },
+      "LSTM_Trend": {
+        "quantile_labels": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4",
+          "Q5",
+          "Q6",
+          "Q7",
+          "Q8",
+          "Q9",
+          "Q10"
+        ],
+        "mean_weights": [
+          0.00926411129619188,
+          0.014129441832476199,
+          0.016933395009618102,
+          0.019574507076253862,
+          0.023829953275495135,
+          0.02772243045334571,
+          0.03420635125076516,
+          0.04232992753314597,
+          0.056538528975300935,
+          0.08880468663074041
+        ],
+        "uplift_ratio": 9.5858829618384
+      },
+      "Policy_Logit": {
+        "quantile_labels": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4",
+          "Q5",
+          "Q6",
+          "Q7",
+          "Q8",
+          "Q9",
+          "Q10"
+        ],
+        "mean_weights": [
+          0.009085770567980352,
+          0.013651684709040015,
+          0.017071547284670665,
+          0.0201483015394825,
+          0.023233533589302174,
+          0.027994334705419278,
+          0.033705040576972406,
+          0.04256332394346942,
+          0.05658945686212183,
+          0.0892903395548747
+        ],
+        "uplift_ratio": 9.827492218386798
+      }
+    },
+    "path_regressions": {
+      "TS_to_LSTM": {
+        "slope": 1.4934483547980275,
+        "intercept": -0.004968916809253168,
+        "r2": 0.9569066547811169
+      },
+      "LSTM_to_Logit": {
+        "slope": 1.2756970862251236,
+        "intercept": -0.004163644256479929,
+        "r2": 0.9850105672624518
+      },
+      "Logit_to_Weight": {
+        "slope": 0.017870550834686194,
+        "intercept": 0.03526140877684127,
+        "r2": 0.7987324520157425
+      },
+      "Chained_Regression": {
+        "coef_TS": 0.0014308550724743655,
+        "coef_LSTM": -0.0015204797530550592,
+        "coef_Logit": 0.018336339548025344,
+        "intercept": 0.03526117427800913,
+        "r2": 0.7987987983654095
+      }
+    },
+    "per_stock_slopes": {
+      "TS_to_LSTM": {
+        "mean_slope": 1.5036527842861602,
+        "std_slope": 0.08650510089965474,
+        "pct_positive": 100.0
+      },
+      "LSTM_to_Logit": {
+        "mean_slope": 1.2732435126971782,
+        "std_slope": 0.03497384544093872,
+        "pct_positive": 100.0
+      },
+      "Logit_to_Weight": {
+        "mean_slope": 0.016724095993724864,
+        "std_slope": 0.0071839558806861365,
+        "pct_positive": 100.0
+      }
+    }
+  },
+  "summary": {
+    "conclusion": "Strong causal chain validated (synthetic data)",
+    "key_findings": [
+      "TS-Momentum correlates with LSTM-Trend (\u03c1=0.976)",
+      "LSTM-Trend drives Policy-Logit (\u03c1=0.992)",
+      "Policy-Logit determines Weight (\u03c1=0.951)",
+      "Top-quantile TS-Momentum receives 8.96x more weight"
+    ],
+    "note": "This demo uses synthetic data to demonstrate the analysis. Run with real dataset for actual portfolio insights."
+  }
+}
